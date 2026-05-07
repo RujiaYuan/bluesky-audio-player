@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Bluesky Audio Player</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #111827;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    .profile {
+      width: 70px;
+      height: 70px;
+      border-radius: 20px;
+      object-fit: cover;
+    }
+
+    .main {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    .player {
+      background: #1f2937;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .hero {
+      position: relative;
+      height: 420px;
+    }
+
+    .hero img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 20px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    }
+
+    .controls {
+      padding: 20px;
+    }
+
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    .episodes {
+      background: #1f2937;
+      border-radius: 20px;
+      padding: 15px;
+      max-height: 700px;
+      overflow-y: auto;
+    }
+
+    .episode {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 14px;
+      cursor: pointer;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .episode:hover {
+      background: rgba(255,255,255,0.12);
+    }
+
+    .episode.active {
+      background: white;
+      color: black;
+    }
+
+    .episode img {
+      width: 90px;
+      height: 90px;
+      border-radius: 12px;
+      object-fit: cover;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin-top: 15px;
+    }
+
+    .time {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #ccc;
+      margin-top: 5px;
+    }
+
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <img id="profileImage" class="profile">
+    <div>
+      <h1 id="profileName">Loading...</h1>
+      <p>Bluesky podcast/audio player</p>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <div class="player">
+
+      <div class="hero">
+        <img id="heroImage">
+        <div class="overlay">
+          <h2 id="title"></h2>
+        </div>
+      </div>
+
+      <div class="controls">
+
+        <audio id="audio"></audio>
+
+        <button onclick="prevTrack()">Prev</button>
+        <button onclick="togglePlay()">Play / Pause</button>
+        <button onclick="nextTrack()">Next</button>
+
+        <input type="range" id="progress" value="0">
+
+        <div class="time">
+          <span id="currentTime">0:00</span>
+          <span id="duration">0:00</span>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="episodes" id="episodes"></div>
+
+  </div>
+
+</div>
+
+<script>
+
+const API = "https://public.api.bsky.app/xrpc";
+const actor = "npr.org";
+
+let episodes = [];
+let current = 0;
+
+const audio = document.getElementById("audio");
+const progress = document.getElementById("progress");
+
+function formatTime(sec) {
+  if (!sec) return "0:00";
+
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60)
+    .toString()
+    .padStart(2, "0");
+
+  return `${m}:${s}`;
+}
+
+function getVideo(embed) {
+
+  if (!embed) return null;
+
+  if (embed.$type === "app.bsky.embed.video#view") {
+    return embed;
+  }
+
+  if (
+    embed.$type === "app.bsky.embed.recordWithMedia#view" &&
+    embed.media?.$type === "app.bsky.embed.video#view"
+  ) {
+    return embed.media;
+  }
+
+  return null;
+}
+
+async function loadFeed() {
+
+  const profileRes = await fetch(
+    `${API}/app.bsky.actor.getProfile?actor=${actor}`
+  );
+
+  const profile = await profileRes.json();
+
+  document.getElementById("profileImage").src = profile.avatar;
+  document.getElementById("profileName").innerText =
+    profile.displayName;
+
+  const feedRes = await fetch(
+    `${API}/app.bsky.feed.getAuthorFeed?actor=${actor}&filter=posts_with_media&limit=30`
+  );
+
+  const data = await feedRes.json();
+
+  episodes = data.feed
+    .map(x => x.post)
+    .map(post => {
+
+      const video = getVideo(post.embed);
+
+      if (!video?.playlist) return null;
+
+      return {
+        title: post.record.text || "Untitled",
+        thumbnail: video.thumbnail || post.author.avatar,
+        playlist: video.playlist
+      };
+    })
+    .filter(Boolean);
+
+  renderEpisodes();
+
+  if (episodes.length) {
+    loadEpisode(0);
+  }
+}
+
+function renderEpisodes() {
+
+  const wrap = document.getElementById("episodes");
+
+  wrap.innerHTML = "";
+
+  episodes.forEach((ep, i) => {
+
+    const div = document.createElement("div");
+
+    div.className =
+      "episode" + (i === current ? " active" : "");
+
+    div.innerHTML = `
+      <img src="${ep.thumbnail}">
+      <div>
+        <div>${ep.title}</div>
+      </div>
+    `;
+
+    div.onclick = () => loadEpisode(i);
+
+    wrap.appendChild(div);
+  });
+}
+
+function loadEpisode(index) {
+
+  current = index;
+
+  renderEpisodes();
+
+  const ep = episodes[index];
+
+  document.getElementById("heroImage").src =
+    ep.thumbnail;
+
+  document.getElementById("title").innerText =
+    ep.title;
+
+  if (Hls.isSupported()) {
+
+    const hls = new Hls();
+
+    hls.loadSource(ep.playlist);
+
+    hls.attachMedia(audio);
+
+  } else {
+
+    audio.src = ep.playlist;
+  }
+
+  audio.play();
+}
+
+function togglePlay() {
+
+  if (audio.paused) {
+    audio.play();
+  } else {
+    audio.pause();
+  }
+}
+
+function nextTrack() {
+
+  current++;
+
+  if (current >= episodes.length) {
+    current = 0;
+  }
+
+  loadEpisode(current);
+}
+
+function prevTrack() {
+
+  current--;
+
+  if (current < 0) {
+    current = episodes.length - 1;
+  }
+
+  loadEpisode(current);
+}
+
+audio.addEventListener("timeupdate", () => {
+
+  progress.value = audio.currentTime;
+
+  document.getElementById("currentTime").innerText =
+    formatTime(audio.currentTime);
+});
+
+audio.addEventListener("loadedmetadata", () => {
+
+  progress.max = audio.duration;
+
+  document.getElementById("duration").innerText =
+    formatTime(audio.duration);
+});
+
+progress.addEventListener("input", () => {
+
+  audio.currentTime = progress.value;
+});
+
+loadFeed();
+
+</script>
+
+</body>
+</html>
+
