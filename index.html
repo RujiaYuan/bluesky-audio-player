@@ -42,6 +42,21 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
       margin-bottom: 24px;
     }
 
+    .profile-link {
+      margin-top: 6px;
+      font-size: 15px;
+      font-weight: normal;
+    }
+
+    .profile-link a {
+      color: #93c5fd;
+      text-decoration: none;
+    }
+
+    .profile-link a:hover {
+      text-decoration: underline;
+    }
+
     .show-grid {
       display: flex;
       gap: 18px;
@@ -100,13 +115,29 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
     .hero {
       position: relative;
       height: 480px;
-      background: #020617;
+      background:
+        radial-gradient(circle at center, rgba(59,130,246,0.18), transparent 35%),
+        #020617;
     }
 
     .hero img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+
+    .logo-placeholder {
+      object-fit: contain !important;
+      width: 180px !important;
+      height: 180px !important;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 24px;
+      background: #1f2937;
+      padding: 16px;
+      box-sizing: border-box;
     }
 
     .overlay {
@@ -375,6 +406,7 @@ let shows = [];
 let episodes = [];
 let current = -1;
 let currentActor = "";
+let currentProfile = null;
 
 const audio = document.getElementById("audio");
 const progress = document.getElementById("progress");
@@ -402,6 +434,10 @@ function timeAgo(date) {
   if (minutes > 0) return `${minutes}M AGO`;
 
   return "JUST NOW";
+}
+
+function getProfileUrl(actor) {
+  return `https://bsky.app/profile/${actor}`;
 }
 
 function getVideo(embed) {
@@ -481,9 +517,10 @@ async function openShow(actor) {
   document.getElementById("selectionPage").classList.add("hidden");
   document.getElementById("playerPage").classList.remove("hidden");
 
-  document.getElementById("profileName").innerText = "Loading...";
+  document.getElementById("profileName").innerHTML = "Loading...";
   document.getElementById("title").innerText = "Choose an episode from the list";
   document.getElementById("heroImage").src = "";
+  document.getElementById("heroImage").classList.add("logo-placeholder");
   document.getElementById("episodes").innerHTML = "Loading episodes...";
 
   await loadFeed(actor);
@@ -501,9 +538,23 @@ async function loadFeed(actor) {
     );
 
     const profile = await profileRes.json();
+    currentProfile = profile;
 
-    document.getElementById("profileName").innerText =
-      profile.displayName || actor;
+    document.getElementById("profileName").innerHTML = `
+      ${profile.displayName || actor}
+      <div class="profile-link">
+        <a href="${getProfileUrl(actor)}" target="_blank">
+          @${actor}
+        </a>
+      </div>
+    `;
+
+    const heroImage = document.getElementById("heroImage");
+    heroImage.src = profile.avatar || "";
+    heroImage.classList.add("logo-placeholder");
+
+    document.getElementById("title").innerText =
+      "Choose an episode from the list";
 
     const feedRes = await fetch(
       `${API}/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&filter=posts_with_media&limit=30`
@@ -579,7 +630,10 @@ function loadEpisode(index) {
 
   renderEpisodes();
 
-  document.getElementById("heroImage").src = ep.thumbnail;
+  const heroImage = document.getElementById("heroImage");
+  heroImage.classList.remove("logo-placeholder");
+  heroImage.src = ep.thumbnail;
+
   document.getElementById("title").innerText = ep.title;
 
   document.getElementById("miniImage").src = ep.thumbnail;
