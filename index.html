@@ -39,7 +39,23 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
     }
 
     h1 {
+      margin: 0;
+    }
+
+    .show-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
       margin-bottom: 24px;
+    }
+
+    .show-header-logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      object-fit: cover;
+      background: #1f2937;
+      flex-shrink: 0;
     }
 
     .profile-link {
@@ -334,14 +350,17 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 <div class="container">
 
   <section id="selectionPage">
-    <h1>Explore Shows</h1>
+    <h1 style="margin-bottom:24px;">Explore Shows</h1>
     <div id="showGrid" class="show-grid"></div>
   </section>
 
   <section id="playerPage" class="hidden">
     <button class="back-btn" onclick="goHome()">← Back to Shows</button>
 
-    <h1 id="profileName">Loading...</h1>
+    <div class="show-header">
+      <img id="showHeaderLogo" class="show-header-logo" src="">
+      <div id="profileName">Loading...</div>
+    </div>
 
     <div class="main">
       <div class="player">
@@ -518,6 +537,7 @@ async function openShow(actor) {
   document.getElementById("playerPage").classList.remove("hidden");
 
   document.getElementById("profileName").innerHTML = "Loading...";
+  document.getElementById("showHeaderLogo").src = "";
   document.getElementById("title").innerText = "Choose an episode from the list";
   document.getElementById("heroImage").src = "";
   document.getElementById("heroImage").classList.add("logo-placeholder");
@@ -540,8 +560,10 @@ async function loadFeed(actor) {
     const profile = await profileRes.json();
     currentProfile = profile;
 
+    document.getElementById("showHeaderLogo").src = profile.avatar || "";
+
     document.getElementById("profileName").innerHTML = `
-      ${profile.displayName || actor}
+      <h1>${profile.displayName || actor}</h1>
       <div class="profile-link">
         <a href="${getProfileUrl(actor)}" target="_blank">
           @${actor}
